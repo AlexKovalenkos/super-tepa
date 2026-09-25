@@ -3,6 +3,7 @@
 import { Simplex, fbm2, mulberry32, hash3 } from './noise.js';
 import { B } from './blocks.js';
 import { H, SEA } from './consts.js';
+import { CASTLE } from './castle.js';
 
 export const BIOME = { PLAINS: 0, FOREST: 1, DESERT: 2, SNOWY: 3, MOUNTAIN: 4, BEACH: 5, OCEAN: 6 };
 export const BIOME_NAMES = ['Равнины', 'Лес', 'Пустыня', 'Снежные равнины', 'Горы', 'Пляж', 'Океан'];
@@ -28,7 +29,36 @@ export class Generator {
     this.nT = mk(); this.nH = mk(); this.c1 = mk(); this.c2 = mk(); this.c3 = mk();
   }
 
+  // Castle site: world centre (x, z), courtyard level g, block list in local coordinates
+  setCastle(x, z, g, blocks) {
+    this.castle = { x, z, g };
+    this.castleChunks = new Map();
+    for (const [dx, dy, dz, id] of blocks) {
+      const wx = x + dx, wy = g + dy, wz = z + dz;
+      const k = (wx >> 4) + ',' + (wz >> 4);
+      if (!this.castleChunks.has(k)) this.castleChunks.set(k, []);
+      this.castleChunks.get(k).push(((wy << 8) | ((wz & 15) << 4) | (wx & 15)), id);
+    }
+  }
+
   column(x, z) {
+    const col = this.naturalColumn(x, z);
+    const c = this.castle;
+    if (!c) return col;
+    const d = Math.max(Math.abs(x - c.x), Math.abs(z - c.z));
+    if (d > CASTLE.BLEND) return col;
+    col.castle = true;
+    if (col.biome !== BIOME.SNOWY) col.biome = BIOME.PLAINS;
+    if (d <= CASTLE.PLATEAU) col.h = c.g;
+    else if (d <= CASTLE.MOAT) { col.h = c.g - 5; col.water = c.g - 1; col.biome = BIOME.OCEAN; }
+    else {
+      const t = (d - CASTLE.MOAT) / (CASTLE.BLEND - CASTLE.MOAT), k = t * t * (3 - 2 * t);
+      col.h = Math.round(c.g - 1 + (col.h - (c.g - 1)) * k);
+    }
+    return col;
+  }
+
+  naturalColumn(x, z) {
     const cont = fbm2(this.nC, x / 900, z / 900, 4) * 1.5;
     const ero = fbm2(this.nE, x / 320, z / 320, 3);
     const det = fbm2(this.nD, x / 64, z / 64, 3);
@@ -72,8 +102,9 @@ export class Generator {
     const rnd = mulberry32((Math.imul(c.cx, 73856093) ^ Math.imul(c.cz, 19349663) ^ this.seed) >>> 0);
 
     for (let lz = 0; lz < 16; lz++) for (let lx = 0; lx < 16; lx++) {
-      const { h, biome, cold } = col(lx, lz);
-      const top = Math.max(h, SEA);
+      const { h, biome, cold, water, castle } = col(lx, lz);
+      const wl = water ?? SEA;
+      const top = Math.max(h, wl);
       for (let y = 0; y <= top; y++) {
         let id;
         if (y === 0 || (y < 5 && rnd() < (5 - y) / 5)) id = B.bedrock;
@@ -85,10 +116,10 @@ export class Generator {
           else id = B.dirt;
         }
         else if (y === h) id = topBlock(biome, h);
-        else id = (y === SEA && cold) ? B.ice : B.water;
+        else id = (y === wl && cold) ? B.ice : B.water;
         b[(y << 8) | (lz << 4) | lx] = id;
       }
-      const caveTop = h > SEA + 3 ? h : Math.min(h - 6, SEA - 8);
+      const caveTop = castle ? 0 : h > SEA + 3 ? h : Math.min(h - 6, SEA - 8);
       const wx = x0 + lx, wz = z0 + lz;
       for (let y = 5; y <= caveTop; y++) {
         const i = (y << 8) | (lz << 4) | lx;
@@ -113,6 +144,10 @@ export class Generator {
     vein(B.coal_ore, 18, 8, 128);
     vein(B.iron_ore, 10, 6, 64);
 
+    // Castle blocks
+    const cb = this.castleChunks && this.castleChunks.get(c.cx + ',' + c.cz);
+    if (cb) for (let i = 0; i < cb.length; i += 2) b[cb[i]] = cb[i + 1];
+
     // Trees: candidates in the margin too, so trees crossing chunk borders are complete.
     const set = (lx, y, lz, id, onlyAir) => {
       if (lx < 0 || lx > 15 || lz < 0 || lz > 15 || y < 1 || y >= H - 2) return;
@@ -128,7 +163,7 @@ export class Generator {
       else if (cl.biome === BIOME.PLAINS) dens = 0.005;
       else if (cl.biome === BIOME.SNOWY) dens = 0.01;
       else if (cl.biome === BIOME.MOUNTAIN && cl.h < 108) dens = 0.01;
-      if (!dens || cl.h < SEA + 1) continue;
+      if (!dens || cl.h < SEA + 1 || cl.castle) continue;
       if (hash3(wx, 777, wz + this.seed) >= dens) continue;
       if (inside(lx, lz) && b[(cl.h << 8) | (lz << 4) | lx] !== topBlock(cl.biome, cl.h)) continue;
       const birch = cl.biome === BIOME.FOREST && hash3(wx, 31, wz) < 0.3;
@@ -154,7 +189,7 @@ export class Generator {
     // Grass and flowers
     for (let lz = 0; lz < 16; lz++) for (let lx = 0; lx < 16; lx++) {
       const cl = col(lx, lz);
-      if (cl.biome !== BIOME.PLAINS && cl.biome !== BIOME.FOREST) continue;
+      if ((cl.biome !== BIOME.PLAINS && cl.biome !== BIOME.FOREST) || cl.castle) continue;
       const h = cl.h;
       if (h < SEA || b[(h << 8) | (lz << 4) | lx] !== B.grass) continue;
       const i = ((h + 1) << 8) | (lz << 4) | lx;

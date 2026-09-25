@@ -11,7 +11,7 @@
 //   step height         0.6, hitbox 0.6 x 1.8, eyes at 1.62 (1.27 sneaking)
 import { SOLID, SLIP, B } from './blocks.js';
 
-const HW = 0.3, HGT = 1.8, STEP = 0.6;
+const STEP = 0.6;
 
 function clipY(bx, b, dy) {
   for (let i = 0; i < bx.length; i += 3) {
@@ -43,8 +43,12 @@ function clipZ(bx, b, dz) {
 function offset(b, x, y, z) { b.x0 += x; b.x1 += x; b.y0 += y; b.y1 += y; b.z0 += z; b.z1 += z; }
 
 export class Player {
-  constructor(world) {
+  // opts: { hw: half width, h: height, speed: movement speed attribute, slowFall }
+  constructor(world, opts = {}) {
     this.world = world;
+    this.hw = opts.hw ?? 0.3; this.h = opts.h ?? 1.8;
+    this.speedAttr = opts.speed ?? 0.1;
+    this.slowFall = !!opts.slowFall;
     this.pos = { x: 0.5, y: 80, z: 0.5 };
     this.prev = { ...this.pos };
     this.vel = { x: 0, y: 0, z: 0 };
@@ -62,7 +66,8 @@ export class Player {
 
   box() {
     const p = this.pos;
-    return { x0: p.x - HW, y0: p.y, z0: p.z - HW, x1: p.x + HW, y1: p.y + HGT, z1: p.z + HW };
+    const hw = this.hw;
+    return { x0: p.x - hw, y0: p.y, z0: p.z - hw, x1: p.x + hw, y1: p.y + this.h, z1: p.z + hw };
   }
 
   setPos(x, y, z) {
@@ -188,7 +193,8 @@ export class Player {
     if (inp.sprint && fwd > 0 && !this.sneaking) this.sprinting = true;
     if (fwd <= 0 || this.sneaking || (this.hColl && !this.flying)) this.sprinting = false;
 
-    let xxa = str * 0.98, zza = fwd * 0.98;
+    const amount = inp.amount ?? 0.98;
+    let xxa = str * amount, zza = fwd * amount;
     if (this.sneaking) { xxa *= 0.3; zza *= 0.3; }
 
     this.inWater = !this.flying && this.checkWater();
@@ -204,7 +210,7 @@ export class Player {
     this.travel(xxa, zza);
     if (this.flying && this.onGround) this.flying = false;
 
-    const targetEye = this.sneaking ? 1.27 : 1.62;
+    const targetEye = this.sneaking ? 1.27 : 1.62; // only meaningful for the player
     this.eye += (targetEye - this.eye) * 0.5;
 
     const dx = p.x - this.prev.x, dz = p.z - this.prev.z;
@@ -244,11 +250,12 @@ export class Player {
       : 1;
     const f = this.onGround ? slip * 0.91 : 0.91;
     const speed = this.onGround
-      ? (this.sprinting ? 0.13 : 0.1) * (0.21600002 / (slip * slip * slip))
+      ? this.speedAttr * (this.sprinting ? 1.3 : 1) * (0.21600002 / (slip * slip * slip))
       : (this.sprinting ? 0.026 : 0.02);
     this.moveRelative(xxa, zza, speed);
     this.move(v.x, v.y, v.z);
     v.y = (v.y - 0.08) * 0.98;
+    if (this.slowFall && !this.onGround && v.y < 0) v.y *= 0.6; // chicken
     v.x *= f; v.z *= f;
   }
 }

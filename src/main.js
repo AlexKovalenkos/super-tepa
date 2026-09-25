@@ -1,6 +1,6 @@
 // Super Tepa: game bootstrap, input, camera, block interaction, save/load and the main loop.
 import * as THREE from 'three';
-import { createAtlasCanvas } from './textures.js';
+import { createAtlasCanvas, TILE } from './textures.js';
 import { B, BLOCKS, SOLID, SHAPE, OPAQUE } from './blocks.js';
 import { World } from './world.js';
 import { BIOME_NAMES } from './worldgen.js';
@@ -10,6 +10,8 @@ import { Player } from './player.js';
 import { Sky } from './sky.js';
 import { createTepa, animateTepa, createPaw } from './tepa.js';
 import { Particles } from './particles.js';
+import { Mobs } from './mobs.js';
+import { Dragon } from './dragon.js';
 import { UI, makeIcons } from './ui.js';
 import { TICK_MS, DAY_TICKS, VERSION } from './consts.js';
 
@@ -26,7 +28,7 @@ const store = {
   del(k) { try { localStorage.removeItem(k); } catch { /* storage unavailable */ } },
 };
 
-const settings = Object.assign({ renderDistance: 8, fov: 70, sensitivity: 1, bobbing: true }, store.get(SETTINGS_KEY) || {});
+const settings = Object.assign({ renderDistance: 8, fov: 70, sensitivity: 1, bobbing: true, alwaysDay: false }, store.get(SETTINGS_KEY) || {});
 
 // ---------- Renderer & scene ----------
 const canvas = document.getElementById('game');
@@ -59,6 +61,8 @@ const terrain = makeTerrainMaterials(atlas);
 const sky = new Sky(scene);
 const particles = new Particles(scene, atlas);
 const ui = new UI(makeIcons(atlasCanvas));
+const dragon = new Dragon(scene);
+let mobs = null;
 
 // Tepa (visible in third person and on the title screen)
 const tepa = createTepa();
@@ -92,7 +96,8 @@ const game = {
   world: null, chunks: null, player: null,
   time: 1000, ticks: 0,
   hotbar: [...DEFAULT_HOTBAR], sel: 0,
-  camMode: 0, // 0 first person, 1 behind, 2 front
+  camDist: 4.6,
+  camMode: 1, // 0 first person, 1 behind (default: Tepa is visible), 2 front
   debug: false,
   target: null,
   breakCd: 0, placeCd: 0, swing: 0, prevSwing: 0,
@@ -104,7 +109,12 @@ window.game = game; // for debugging from the console
 
 function newWorld(seed, saved) {
   if (game.chunks) game.chunks.clear();
+  if (mobs) mobs.clear();
   game.world = new World(seed, saved?.mods);
+  mobs = new Mobs(scene, game.world, particles);
+  game.world.onGenerate = c => mobs.onChunk(c);
+  dragon.placed = false;
+  game.mobs = mobs; game.dragon = dragon;
   game.chunks = new ChunkManager(scene, game.world, terrain.list);
   game.chunks.setRadius(settings.renderDistance);
   game.player = new Player(game.world);
@@ -118,8 +128,9 @@ function newWorld(seed, saved) {
     game.player.yaw = p.yaw; game.player.pitch = p.pitch; game.player.flying = !!p.flying;
     game.spawnReady = 'saved';
   } else {
-    const s = game.world.findSpawn();
+    const s = game.world.spawn;
     game.player.setPos(s.x, 200, s.z);
+    game.player.yaw = 0; // facing north, towards the castle
     game.spawnReady = 'find';
   }
   refreshHotbar();
@@ -163,6 +174,23 @@ function lockPointer() {
   } catch { /* pointer lock not available */ }
 }
 
+function toggleFly() {
+  const p = game.player;
+  if (p.flying) { p.flying = false; return; }
+  p.flying = true;
+  // Lift off right away so touching the ground doesn't cancel the flight
+  if (p.onGround) { p.vel.y = 0.42; p.onGround = false; }
+}
+
+let toastTimer = 0;
+function toast(text) {
+  const el = document.getElementById('toast');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
 function setState(s) {
   game.state = s;
   ui.show('title', s === 'title');
@@ -193,12 +221,11 @@ document.addEventListener('keydown', e => {
   const now = performance.now();
   if (e.code === 'KeyW') { if (now - lastW < 300) sprintLatch = true; lastW = now; }
   if (e.code === 'Space') {
-    if (now - lastSpace < 300 && !game.player.inWater) {
-      game.player.flying = !game.player.flying;
-      if (!game.player.flying) game.player.vel.y = 0;
-      lastSpace = 0;
-    } else lastSpace = now;
+    // Double tap within 7 ticks (350 ms), as in Minecraft
+    if (now - lastSpace < 350 && !game.player.inWater) { toggleFly(); lastSpace = 0; } else lastSpace = now;
   }
+  if (e.code === 'KeyF') toggleFly();
+  if (e.code === 'KeyN') { game.time = 0; toast('Наступило утро'); }
   if (e.code.startsWith('Digit')) { const n = +e.code.slice(5); if (n >= 1) selectSlot(n - 1); }
   if (e.code === 'F5' || e.code === 'KeyV') game.camMode = (game.camMode + 1) % 3;
   if (e.code === 'F3' || e.code === 'Backquote') game.debug = !game.debug;
@@ -235,24 +262,32 @@ document.addEventListener('wheel', e => {
 }, { passive: true });
 
 // ---------- Block interaction ----------
-function raycast() {
+// Ray used for aiming: from the eyes in first person, from the camera through the crosshair in third person
+function aimRay() {
   const p = game.player;
-  const ox = p.pos.x, oy = p.pos.y + p.eye, oz = p.pos.z;
+  if (game.camMode === 1) {
+    const d = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    return { ox: camera.position.x, oy: camera.position.y, oz: camera.position.z, dx: d.x, dy: d.y, dz: d.z, max: game.camDist + REACH };
+  }
   const cp = Math.cos(p.pitch);
-  const dx = -Math.sin(p.yaw) * cp, dy = Math.sin(p.pitch), dz = -Math.cos(p.yaw) * cp;
+  return { ox: p.pos.x, oy: p.pos.y + p.eye, oz: p.pos.z, dx: -Math.sin(p.yaw) * cp, dy: Math.sin(p.pitch), dz: -Math.cos(p.yaw) * cp, max: REACH };
+}
+
+function raycast() {
+  const { ox, oy, oz, dx, dy, dz, max: REACH } = aimRay();
   let x = Math.floor(ox), y = Math.floor(oy), z = Math.floor(oz);
   const sx = Math.sign(dx), sy = Math.sign(dy), sz = Math.sign(dz);
   const tdx = dx ? Math.abs(1 / dx) : Infinity, tdy = dy ? Math.abs(1 / dy) : Infinity, tdz = dz ? Math.abs(1 / dz) : Infinity;
   let tx = dx > 0 ? (x + 1 - ox) * tdx : dx < 0 ? (ox - x) * tdx : Infinity;
   let ty = dy > 0 ? (y + 1 - oy) * tdy : dy < 0 ? (oy - y) * tdy : Infinity;
   let tz = dz > 0 ? (z + 1 - oz) * tdz : dz < 0 ? (oz - z) * tdz : Infinity;
-  let nx = 0, ny = 0, nz = 0;
-  for (let i = 0; i < 64; i++) {
+  let nx = 0, ny = 0, nz = 0, tHit = 0;
+  for (let i = 0; i < 128; i++) {
     const id = game.world.getBlock(x, y, z);
-    if (id && id !== B.water) return { x, y, z, nx, ny, nz, id };
-    if (tx < ty && tx < tz) { if (tx > REACH) break; x += sx; tx += tdx; nx = -sx; ny = 0; nz = 0; }
-    else if (ty < tz) { if (ty > REACH) break; y += sy; ty += tdy; nx = 0; ny = -sy; nz = 0; }
-    else { if (tz > REACH) break; z += sz; tz += tdz; nx = 0; ny = 0; nz = -sz; }
+    if (id && id !== B.water) return { x, y, z, nx, ny, nz, id, t: tHit };
+    if (tx < ty && tx < tz) { if (tx > REACH) break; tHit = tx; x += sx; tx += tdx; nx = -sx; ny = 0; nz = 0; }
+    else if (ty < tz) { if (ty > REACH) break; tHit = ty; y += sy; ty += tdy; nx = 0; ny = -sy; nz = 0; }
+    else { if (tz > REACH) break; tHit = tz; z += sz; tz += tdz; nx = 0; ny = 0; nz = -sz; }
   }
   return null;
 }
@@ -278,7 +313,18 @@ function breakBlock() {
   afterEdit(t.x, t.z);
 }
 
+function petMob() {
+  const r = aimRay();
+  const hit = mobs.raycast(r.ox, r.oy, r.oz, r.dx, r.dy, r.dz, r.max);
+  if (!hit || (game.target && game.target.t < hit.t)) return false;
+  game.swing = 1;
+  const msg = mobs.interact(hit.mob, game.player.pos);
+  if (msg) toast(msg);
+  return true;
+}
+
 function placeBlock() {
+  if (petMob()) return;
   const t = game.target, id = game.hotbar[game.sel];
   if (!t || !id) return;
   game.swing = 1;
@@ -342,14 +388,22 @@ const bobBtn = $('btn-bob');
 const bobText = () => { bobBtn.textContent = `Покачивание камеры: ${settings.bobbing ? 'ВКЛ' : 'ВЫКЛ'}`; };
 bobText();
 bobBtn.addEventListener('click', () => { settings.bobbing = !settings.bobbing; store.set(SETTINGS_KEY, settings); bobText(); });
+const dayBtn = $('btn-day');
+const dayText = () => { dayBtn.textContent = settings.alwaysDay ? 'Время: всегда день' : 'Время: день и ночь (как в Minecraft)'; };
+dayText();
+dayBtn.addEventListener('click', () => { settings.alwaysDay = !settings.alwaysDay; store.set(SETTINGS_KEY, settings); dayText(); });
 
 window.addEventListener('beforeunload', () => { if (game.state !== 'title') saveGame(); });
 setInterval(() => { if (game.state === 'playing') saveGame(); }, 30000);
 
 // ---------- Tick ----------
-function tick() {
+function advanceTime() {
   game.ticks++;
-  game.time = (game.time + 1) % DAY_TICKS;
+  game.time = settings.alwaysDay ? 6000 : (game.time + 1) % DAY_TICKS;
+}
+
+function tick() {
+  advanceTime();
   const p = game.player;
   if (game.state === 'playing') {
     inp.forward = keys.has('KeyW'); inp.back = keys.has('KeyS');
@@ -361,6 +415,7 @@ function tick() {
     if (p.pos.y < -64) { p.setPos(p.pos.x, game.world.topSolidY(Math.floor(p.pos.x), Math.floor(p.pos.z)) + 1, p.pos.z); }
     if (mouseL && --game.breakCd <= 0) { breakBlock(); game.breakCd = 5; }
     if (mouseR && --game.placeCd <= 0) { placeBlock(); game.placeCd = 4; }
+    mobs.tick(p);
   } else {
     p.prev = { ...p.pos };
     p.prevLimbPos = p.limbPos;
@@ -407,7 +462,7 @@ function frame(now) {
     if (n === 10) clock.acc = 0;
   } else {
     clock.acc += dt * 1000;
-    while (clock.acc >= TICK_MS) { game.ticks++; game.time = (game.time + 1) % DAY_TICKS; clock.acc -= TICK_MS; }
+    while (clock.acc >= TICK_MS) { advanceTime(); clock.acc -= TICK_MS; }
   }
   const a = clock.acc / TICK_MS;
 
@@ -438,13 +493,18 @@ function frame(now) {
       camera.translateX(Math.sin(wd * Math.PI) * bob * 0.5);
       camera.translateY(-Math.abs(Math.cos(wd * Math.PI) * bob));
     } else if (game.camMode !== 0) {
+      // Third person: a bit further back than Minecraft's 4 blocks, so the whole dog and her wings fit
+      camera.position.y += 0.35;
       const dir = new THREE.Vector3(0, 0, game.camMode === 1 ? 1 : -1).applyEuler(camera.rotation);
-      let dist = 4;
-      for (let d = 0.2; d <= 4; d += 0.1) {
+      const want = 4.6;
+      let dist = want;
+      for (let d = 0.2; d <= want; d += 0.1) {
         const q = camera.position.clone().addScaledVector(dir, d);
-        if (OPAQUE[game.world.getBlock(Math.floor(q.x), Math.floor(q.y), Math.floor(q.z))]) { dist = Math.max(0.3, d - 0.3); break; }
+        const cb = game.world.getBlock(Math.floor(q.x), Math.floor(q.y), Math.floor(q.z));
+        if (OPAQUE[cb] || SOLID[cb]) { dist = Math.max(0.3, d - 0.3); break; }
       }
       camera.position.addScaledVector(dir, dist);
+      game.camDist = dist;
       if (game.camMode === 2) camera.rotation.set(-p.pitch, p.yaw + Math.PI, 0);
     }
     if (p.flying) fovTarget *= 1.1;
@@ -495,6 +555,10 @@ function frame(now) {
     inWater: p.inWater, t,
   }, dt);
 
+  mobs.update(dt, a, t, camera.position);
+  if (game.spawnReady === true) dragon.update(dt, t, p, game.world, (x, y, z) => particles.burst(x, y, z, { tile: TILE.fx_heart, count: 1, spread: 0.6, vy: 0.05, life: 30, size: 0.3 }));
+  document.getElementById('fly-hint').classList.toggle('show', game.state === 'playing' && p.flying);
+
   particles.update(camera, a);
 
   renderer.clear();
@@ -528,7 +592,7 @@ function frame(now) {
     const col = game.world.gen.column(bx, bz);
     ui.setDebug([
       `Super Тёпа v${VERSION} (${clock.fps} fps)`,
-      `Чанки: ${st.meshed} отрисовано / ${st.loaded} загружено`,
+      `Чанки: ${st.meshed} отрисовано / ${st.loaded} загружено   Существ: ${mobs.list.length}`,
       ``,
       `XYZ: ${p.pos.x.toFixed(3)} / ${p.pos.y.toFixed(5)} / ${p.pos.z.toFixed(3)}`,
       `Блок: ${bx} ${by} ${bz}   Чанк: ${bx >> 4} ${bz >> 4}`,

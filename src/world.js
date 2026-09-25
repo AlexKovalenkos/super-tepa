@@ -2,6 +2,7 @@
 import { B, OPAQUE, LIGHT_OP, EMIT, SOLID } from './blocks.js';
 import { Generator, BIOME } from './worldgen.js';
 import { H, SEA } from './consts.js';
+import { buildCastle } from './castle.js';
 
 export const ckey = (cx, cz) => (((cx & 0xffff) << 16) | (cz & 0xffff)) >>> 0;
 const DX = [1, -1, 0, 0, 0, 0], DY = [0, 0, 1, -1, 0, 0], DZ = [0, 0, 0, 0, 1, -1];
@@ -33,6 +34,14 @@ export class World {
     this.chunks = new Map();
     this.mods = new Map(); // "cx,cz" -> Map(index -> block id): player edits, re-applied on regeneration
     if (mods) for (const k in mods) this.mods.set(k, new Map(mods[k]));
+    // Spawn point and the castle 70 blocks north of it (straight ahead when the game starts)
+    this.spawn = this.findSpawn();
+    const cx = Math.floor(this.spawn.x), cz = Math.floor(this.spawn.z) - 70;
+    let hs = 0;
+    for (let dz = -10; dz <= 10; dz += 5) for (let dx = -10; dx <= 10; dx += 5) hs += this.gen.naturalColumn(cx + dx, cz + dz).h;
+    const g = Math.min(110, Math.max(SEA + 4, Math.round(hs / 25) + 3));
+    this.castle = { x: cx, z: cz, g };
+    this.gen.setCastle(cx, cz, g, buildCastle());
   }
 
   serializeMods() {
@@ -67,6 +76,7 @@ export class World {
     c.computeMaxY();
     this.chunks.set(ckey(cx, cz), c);
     this.initLight(c);
+    if (this.onGenerate) this.onGenerate(c);
     return c;
   }
 
@@ -85,7 +95,7 @@ export class World {
     for (let r = 0; r < 4000; r += 24) {
       for (let a = 0; a < 12; a++) {
         const x = Math.round(Math.cos(a * Math.PI / 6) * r), z = Math.round(Math.sin(a * Math.PI / 6) * r);
-        const col = this.gen.column(x, z);
+        const col = this.gen.naturalColumn(x, z);
         if (col.h >= SEA + 2 && col.h < 95 && (col.biome === BIOME.PLAINS || col.biome === BIOME.FOREST)) return { x: x + 0.5, z: z + 0.5 };
       }
     }

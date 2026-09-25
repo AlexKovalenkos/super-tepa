@@ -90,3 +90,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color:
   #inv-grid { grid-template-columns: repeat(6, 40px); }
   .inv-cell { width: 40px; height: 40px; }
 }
+
+#toast, #fly-hint { position: absolute; left: 50%; transform: translateX(-50%); font-size: 12px; text-shadow: 2px 2px 0 var(--text-shadow); white-space: nowrap; opacity: 0; transition: opacity .3s; }
+#toast { top: 22%; font-size: 14px; color: #ffe680; }
+#fly-hint { bottom: 112px; font-size: 10px; color: #e8f4ff; background: rgba(0,0,0,.35); padding: 6px 10px; }
+#toast.show, #fly-hint.show { opacity: 1; }
+@media (max-width: 700px) { #fly-hint { white-space: normal; width: calc(100vw - 32px); text-align: center; } }

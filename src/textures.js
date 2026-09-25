@@ -7,7 +7,8 @@ export const TILE_NAMES = [
   'gravel', 'oak_log', 'oak_log_top', 'oak_leaves', 'glass', 'water', 'coal_ore', 'iron_ore',
   'bricks', 'snow', 'birch_log', 'birch_log_top', 'birch_leaves', 'glowstone', 'torch', 'wool_white',
   'wool_red', 'wool_blue', 'wool_yellow', 'wool_green', 'wool_black', 'gold_block', 'sandstone_top', 'sandstone_side',
-  'sandstone_bottom', 'stone_bricks', 'ice', 'short_grass', 'dandelion', 'poppy',
+  'sandstone_bottom', 'stone_bricks', 'ice', 'short_grass', 'dandelion', 'poppy', 'white_stone', 'pink_stone',
+  'blue_roof', 'window', 'fx_white', 'fx_heart', 'fx_spark', 'fx_note',
 ];
 export const TILE = Object.fromEntries(TILE_NAMES.map((n, i) => [n, i]));
 
@@ -246,6 +247,41 @@ function flower(px, rnd, petal, dark, center) {
 }
 P.dandelion = (px, rnd) => flower(px, rnd, [255, 236, 40], [224, 190, 20], null);
 P.poppy = (px, rnd) => flower(px, rnd, [222, 32, 32], [170, 20, 20], [40, 20, 20]);
+
+// Castle blocks: smooth fairy-tale stone bricks, scalloped roof tiles, stained glass
+function castleBricks(px, rnd, base, line) {
+  each((x, y) => {
+    const row = y >> 2, xo = (x + (row % 2) * 4) & 15;
+    shade(px, x, y, (y % 4 === 3 || xo % 8 === 7) ? line : base, j(rnd, 6));
+  });
+}
+P.white_stone = (px, rnd) => castleBricks(px, rnd, [238, 233, 222], [208, 201, 188]);
+P.pink_stone = (px, rnd) => castleBricks(px, rnd, [236, 170, 192], [206, 138, 162]);
+P.blue_roof = (px, rnd) => each((x, y) => {
+  const row = y >> 2, xo = (x + (row % 2) * 2) % 4, yo = y % 4;
+  let c = [58, 98, 200];
+  if (yo === 3) c = [34, 62, 140];
+  else if (xo === 3) c = [44, 78, 170];
+  else if (yo === 0) c = [92, 134, 228];
+  shade(px, x, y, c, j(rnd, 8));
+});
+P.window = (px) => each((x, y) => {
+  if (x === 0 || y === 0 || x === 15 || y === 15 || x === 7 || y === 7) px(x, y, 238, 233, 222, 255);
+  else px(x, y, 120, 170, 240, 150);
+});
+
+// Particle sprites
+P.fx_white = (px) => each((x, y) => px(x, y, 255, 255, 255));
+function sprite(rows, px, col) {
+  rows.forEach((r, y) => [...r].forEach((ch, x) => {
+    if (ch === '.') return;
+    const c = col[ch];
+    for (let k = 0; k < 4; k++) px(x * 2 + (k & 1) + 1, y * 2 + (k >> 1) + 1, c[0], c[1], c[2]);
+  }));
+}
+P.fx_heart = (px) => sprite(['.RR.RR.', 'RWRRRRR', 'RRRRRRR', 'RRRRRRR', '.RRRRR.', '..RRR..', '...R...'], px, { R: [232, 40, 70], W: [255, 200, 210] });
+P.fx_spark = (px) => sprite(['...W...', '...W...', '..WYW..', 'WWYYYWW', '..WYW..', '...W...', '...W...'], px, { W: [255, 255, 255], Y: [255, 240, 150] });
+P.fx_note = (px) => sprite(['..WWWW.', '..W..W.', '..W..W.', '..W..W.', 'WWW.WWW', 'WWW.WWW'], px, { W: [255, 255, 255] });
 
 // Builds the atlas canvas (16 tiles per row)
 export function createAtlasCanvas() {

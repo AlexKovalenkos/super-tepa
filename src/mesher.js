@@ -1,7 +1,7 @@
 // Chunk mesher: face culling, Minecraft "smooth lighting" (per-vertex light average + ambient occlusion),
 // directional face shading, lowered water surface, cross-shaped plants and torches.
 import * as THREE from 'three';
-import { B, OPAQUE, SHAPE, PASS, FACE_TILE } from './blocks.js';
+import { B, OPAQUE, SHAPE, PASS, FACE_TILE, CULL_SAME } from './blocks.js';
 import { H } from './consts.js';
 
 const P = 18, PP = P * P; // padded chunk: 16 + 1 block border on each side
@@ -140,7 +140,7 @@ export function buildChunk(world, c) {
         const F = FACES[f], ni = pi + F.no, nid = pb[ni];
         if (nid) {
           if (OPAQUE[nid]) continue;
-          if (nid === id && (id === B.glass || isWater || id === B.ice)) continue;
+          if (nid === id && CULL_SAME[id]) continue;
         }
         const tile = FACE_TILE[id * 6 + f];
         const tu = (tile & 15) / 16, tv = 1 - ((tile >> 4) + 1) / 16;

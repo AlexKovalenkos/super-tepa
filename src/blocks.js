@@ -11,6 +11,7 @@ export const SHAPE = new Uint8Array(256);    // 0 cube, 1 cross, 2 torch, 255 ai
 export const PASS = new Uint8Array(256);     // 0 opaque, 1 cutout, 2 translucent
 export const FACE_TILE = new Uint16Array(256 * 6); // face order: +x -x +y -y +z -z
 export const SLIP = new Float32Array(256).fill(0.6);
+export const CULL_SAME = new Uint8Array(256); // faces between two blocks of this type are hidden (glass, water…)
 
 const SHAPES = { cube: 0, cross: 1, torch: 2 };
 const PASSES = { opaque: 0, cutout: 1, translucent: 2 };
@@ -34,6 +35,7 @@ function def(id, key, name, o) {
     inv: o.inv ?? true,
     needsSupport: shape !== 'cube',
   };
+  CULL_SAME[id] = o.cullSame ? 1 : 0;
   BLOCKS[id] = b; B[key] = id;
   OPAQUE[id] = b.opaque ? 1 : 0;
   SOLID[id] = b.solid ? 1 : 0;
@@ -58,8 +60,8 @@ def(7, 'sand', 'Песок', { tex: 'sand' });
 def(8, 'gravel', 'Гравий', { tex: 'gravel' });
 def(9, 'oak_log', 'Дубовое бревно', { tex: { top: 'oak_log_top', side: 'oak_log' } });
 def(10, 'oak_leaves', 'Дубовая листва', { tex: 'oak_leaves', pass: 'cutout', opaque: false, lightOpacity: 1 });
-def(11, 'glass', 'Стекло', { tex: 'glass', pass: 'cutout', opaque: false, lightOpacity: 0 });
-def(12, 'water', 'Вода', { tex: 'water', pass: 'translucent', solid: false, opaque: false, lightOpacity: 1, inv: false });
+def(11, 'glass', 'Стекло', { tex: 'glass', pass: 'cutout', opaque: false, lightOpacity: 0, cullSame: true });
+def(12, 'water', 'Вода', { tex: 'water', pass: 'translucent', solid: false, opaque: false, lightOpacity: 1, inv: false, cullSame: true });
 def(13, 'coal_ore', 'Угольная руда', { tex: 'coal_ore' });
 def(14, 'iron_ore', 'Железная руда', { tex: 'iron_ore' });
 def(15, 'bricks', 'Кирпичи', { tex: 'bricks' });
@@ -75,11 +77,15 @@ def(24, 'wool_yellow', 'Жёлтая шерсть', { tex: 'wool_yellow' });
 def(25, 'gold_block', 'Золотой блок', { tex: 'gold_block' });
 def(26, 'sandstone', 'Песчаник', { tex: { top: 'sandstone_top', bottom: 'sandstone_bottom', side: 'sandstone_side' } });
 def(27, 'stone_bricks', 'Каменные кирпичи', { tex: 'stone_bricks' });
-def(28, 'ice', 'Лёд', { tex: 'ice', pass: 'translucent', opaque: false, lightOpacity: 1, slip: 0.98 });
+def(28, 'ice', 'Лёд', { tex: 'ice', pass: 'translucent', opaque: false, lightOpacity: 1, slip: 0.98, cullSame: true });
 def(29, 'short_grass', 'Трава', { tex: 'short_grass', shape: 'cross', pass: 'cutout' });
 def(30, 'dandelion', 'Одуванчик', { tex: 'dandelion', shape: 'cross', pass: 'cutout' });
 def(31, 'poppy', 'Мак', { tex: 'poppy', shape: 'cross', pass: 'cutout' });
 def(32, 'wool_green', 'Зелёная шерсть', { tex: 'wool_green' });
 def(33, 'wool_black', 'Чёрная шерсть', { tex: 'wool_black' });
+def(34, 'white_stone', 'Белый камень замка', { tex: 'white_stone' });
+def(35, 'pink_stone', 'Розовый камень', { tex: 'pink_stone' });
+def(36, 'blue_roof', 'Синяя черепица', { tex: 'blue_roof' });
+def(37, 'window', 'Витраж', { tex: 'window', pass: 'translucent', opaque: false, lightOpacity: 0, cullSame: true });
 
 export const INVENTORY_BLOCKS = BLOCKS.filter(b => b && b.inv).map(b => b.id);
