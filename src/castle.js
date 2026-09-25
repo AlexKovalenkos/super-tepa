@@ -4,8 +4,8 @@ import { B } from './blocks.js';
 
 export const CASTLE = {
   PLATEAU: 27,  // square plateau half-size (Chebyshev distance)
-  MOAT: 33,     // moat from PLATEAU+1 to MOAT
-  BLEND: 46,    // terrain blends back to natural up to here
+  MOAT: 35,     // moat from PLATEAU+1 to MOAT (8 blocks wide, room for the whale)
+  BLEND: 48,    // terrain blends back to natural up to here
 };
 
 export function buildCastle() {
@@ -122,7 +122,7 @@ export function buildCastle() {
   tower(6, WR + 1, 1, 15, 3, 2.8);
 
   // Bridge over the moat
-  for (let z = WR + 1; z <= 35; z++) {
+  for (let z = WR + 1; z <= CASTLE.MOAT + 2; z++) {
     for (let x = -2; x <= 2; x++) set(x, 0, z, F);
     if (z > 27) { set(-3, 1, z, W); set(3, 1, z, W); if (z % 3 === 0) { set(-3, 2, z, L); set(3, 2, z, L); } }
   }

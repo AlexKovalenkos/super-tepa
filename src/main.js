@@ -12,6 +12,8 @@ import { createTepa, animateTepa, createPaw } from './tepa.js';
 import { Particles } from './particles.js';
 import { Mobs } from './mobs.js';
 import { Dragon } from './dragon.js';
+import { Whale } from './whale.js';
+import { CASTLE } from './castle.js';
 import { isTouch, setupTouch } from './touch.js';
 import { UI, makeIcons } from './ui.js';
 import { TICK_MS, DAY_TICKS, VERSION } from './consts.js';
@@ -64,6 +66,7 @@ const sky = new Sky(scene);
 const particles = new Particles(scene, atlas);
 const ui = new UI(makeIcons(atlasCanvas));
 const dragon = new Dragon(scene);
+const whale = new Whale(scene, particles);
 let mobs = null;
 
 // Tepa (visible in third person and on the title screen)
@@ -122,7 +125,7 @@ function newWorld(seed, saved) {
   if (isTouch) mobs.max = 45;
   game.world.onGenerate = c => mobs.onChunk(c);
   dragon.placed = false;
-  game.mobs = mobs; game.dragon = dragon;
+  game.mobs = mobs; game.dragon = dragon; game.whale = whale;
   game.chunks = new ChunkManager(scene, game.world, terrain.list);
   game.chunks.setRadius(settings.renderDistance);
   game.player = new Player(game.world);
@@ -580,6 +583,7 @@ function frame(now) {
   }, dt);
 
   mobs.update(dt, a, t, camera.position);
+  whale.update(dt, t, game.world.castle, p.pos, (CASTLE.PLATEAU + 1 + CASTLE.MOAT) / 2);
   if (game.spawnReady === true) dragon.update(dt, t, p, game.world, (x, y, z) => particles.burst(x, y, z, { tile: TILE.fx_heart, count: 1, spread: 0.6, vy: 0.05, life: 30, size: 0.3 }));
   if (touchUI) touchUI.update();
   document.getElementById('fly-hint').classList.toggle('show', game.state === 'playing' && p.flying);

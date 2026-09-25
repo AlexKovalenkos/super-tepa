@@ -25,7 +25,7 @@ export function setupTouch(api) {
   const hold = (id, code) => {
     const el = root.querySelector(id);
     const up = e => { if (el.dataset.pid == e.pointerId) { el.classList.remove('on'); delete el.dataset.pid; api.key(code, false); } };
-    el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); el.dataset.pid = e.pointerId; el.setPointerCapture(e.pointerId); el.classList.add('on'); api.key(code, true); });
+    el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); el.dataset.pid = e.pointerId; try { el.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ } el.classList.add('on'); api.key(code, true); });
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
   };
@@ -56,7 +56,7 @@ export function setupTouch(api) {
       look = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), moved: false, breaking: false };
       look.timer = setTimeout(() => { if (look && !look.moved) { look.breaking = true; api.key('KeyZ', true); } }, 350);
     }
-    root.setPointerCapture(e.pointerId);
+    try { root.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
   });
 
   root.addEventListener('pointermove', e => {

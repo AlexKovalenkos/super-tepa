@@ -50,7 +50,7 @@ export class Generator {
     col.castle = true;
     if (col.biome !== BIOME.SNOWY) col.biome = BIOME.PLAINS;
     if (d <= CASTLE.PLATEAU) col.h = c.g;
-    else if (d <= CASTLE.MOAT) { col.h = c.g - 5; col.water = c.g - 1; col.biome = BIOME.OCEAN; }
+    else if (d <= CASTLE.MOAT) { col.h = c.g - 7; col.water = c.g - 1; col.biome = BIOME.OCEAN; }
     else {
       const t = (d - CASTLE.MOAT) / (CASTLE.BLEND - CASTLE.MOAT), k = t * t * (3 - 2 * t);
       col.h = Math.round(c.g - 1 + (col.h - (c.g - 1)) * k);
