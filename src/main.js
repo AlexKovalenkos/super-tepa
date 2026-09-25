@@ -236,6 +236,9 @@ document.addEventListener('keydown', e => {
     if (now - lastSpace < 350 && !game.player.inWater) { toggleFly(); lastSpace = 0; } else lastSpace = now;
   }
   if (e.code === 'KeyF') toggleFly();
+  // Keyboard building for trackpads: Z breaks, X places (hold to repeat)
+  if (e.code === 'KeyZ') { breakBlock(); game.breakCd = 5; }
+  if (e.code === 'KeyX') { placeBlock(); game.placeCd = 4; }
   if (e.code === 'KeyN') { game.time = 0; toast('Наступило утро'); }
   if (e.code.startsWith('Digit')) { const n = +e.code.slice(5); if (n >= 1) selectSlot(n - 1); }
   if (e.code === 'F5' || e.code === 'KeyV') game.camMode = (game.camMode + 1) % 3;
@@ -432,8 +435,8 @@ function tick() {
     inp.sprint = sprintLatch || keys.has('ControlLeft') || keys.has('KeyR');
     p.tick(inp);
     if (p.pos.y < -64) { p.setPos(p.pos.x, game.world.topSolidY(Math.floor(p.pos.x), Math.floor(p.pos.z)) + 1, p.pos.z); }
-    if (mouseL && --game.breakCd <= 0) { breakBlock(); game.breakCd = 5; }
-    if (mouseR && --game.placeCd <= 0) { placeBlock(); game.placeCd = 4; }
+    if ((mouseL || keys.has('KeyZ')) && --game.breakCd <= 0) { breakBlock(); game.breakCd = 5; }
+    if ((mouseR || keys.has('KeyX')) && --game.placeCd <= 0) { placeBlock(); game.placeCd = 4; }
     mobs.tick(p);
   } else {
     p.prev = { ...p.pos };
