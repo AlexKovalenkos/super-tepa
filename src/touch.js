@@ -16,7 +16,7 @@ export function setupTouch(api) {
     <button class="tbtn small" id="t-inv" aria-label="Все блоки">▦</button>
     <button class="tbtn" id="t-break" aria-label="Сломать"><span>⛏</span><small>сломать</small></button>
     <button class="tbtn" id="t-place" aria-label="Поставить"><span>■</span><small>поставить</small></button>
-    <button class="tbtn" id="t-fly" aria-label="Полёт"><span>🦋</span><small>полёт</small></button>
+    <button class="tbtn" id="t-fly" aria-label="Полёт"><span>🦋</span><small>взлететь</small></button>
     <button class="tbtn" id="t-down" aria-label="Вниз"><span>▼</span><small>вниз</small></button>
     <button class="tbtn big" id="t-jump" aria-label="Прыжок"><span>▲</span><small>прыжок</small></button>`;
   document.body.appendChild(root);
@@ -98,7 +98,11 @@ export function setupTouch(api) {
   return {
     update() {
       root.classList.toggle('show', api.state() === 'playing');
-      root.querySelector('#t-down').classList.toggle('hidden', !api.isFlying());
+      const flying = api.isFlying();
+      root.querySelector('#t-down').classList.toggle('hidden', !flying);
+      const fly = root.querySelector('#t-fly');
+      fly.classList.toggle('on', flying);
+      fly.querySelector('small').textContent = flying ? 'сесть' : 'взлететь';
     },
   };
 }

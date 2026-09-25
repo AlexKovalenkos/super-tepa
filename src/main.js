@@ -91,16 +91,11 @@ const outline = new THREE.LineSegments(
 );
 outline.visible = false;
 scene.add(outline);
-// Soft white glow on the block that will break, and a see-through "ghost" where the new block will go
+// Soft white glow on the block you are aiming at
 const highlight = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, depthWrite: false }));
 highlight.visible = false;
 scene.add(highlight);
-const ghostMat = new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
-const ghost = new THREE.Mesh(new THREE.BufferGeometry(), ghostMat);
-ghost.visible = false;
-ghost.renderOrder = 4;
-scene.add(ghost);
-let ghostId = -1;
+
 
 // ---------- Game state ----------
 const game = {
@@ -235,7 +230,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyW' || e.code === 'ArrowUp') { if (now - lastW < 300) sprintLatch = true; lastW = now; }
   if (e.code === 'Space') {
     // Double tap within 7 ticks (350 ms), as in Minecraft
-    if (now - lastSpace < 350 && !game.player.inWater) { toggleFly(); lastSpace = 0; } else lastSpace = now;
+    if (!isTouch && now - lastSpace < 350 && !game.player.inWater) { toggleFly(); lastSpace = 0; } else lastSpace = now;
   }
   if (e.code === 'KeyF') toggleFly();
   // Keyboard building for trackpads: Z breaks, X places (hold to repeat)
@@ -564,18 +559,10 @@ function frame(now) {
     outline.visible = true;
     highlight.visible = true;
     highlight.position.set(tg.x + 0.5, tg.y + 0.5, tg.z + 0.5);
-    const gid = game.hotbar[game.sel];
-    const gp = placeTarget(tg, gid);
-    ghost.visible = !!gp;
-    if (gp) {
-      if (ghostId !== gid) { ghost.geometry.dispose(); ghost.geometry = buildItemGeometry(gid); ghostId = gid; }
-      ghost.position.set(gp.x + 0.5, gp.y + 0.5, gp.z + 0.5);
-      ghost.rotation.y = SHAPE[gid] ? Math.PI / 4 : 0;
-    }
     if (sh === 2) { outline.scale.set(0.3, 0.64, 0.3); outline.position.set(tg.x + 0.5, tg.y + 0.32, tg.z + 0.5); }
     else if (sh === 1) { outline.scale.set(0.8, 0.8, 0.8); outline.position.set(tg.x + 0.5, tg.y + 0.4, tg.z + 0.5); }
     else { outline.scale.set(1, 1, 1); outline.position.set(tg.x + 0.5, tg.y + 0.5, tg.z + 0.5); }
-  } else outline.visible = highlight.visible = ghost.visible = false;
+  } else outline.visible = highlight.visible = false;
 
   // Tepa model
   const bright = brightnessAt(ix, iy + 1, iz);

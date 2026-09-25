@@ -129,3 +129,4 @@ body.touch #hud > *:not(#hotbar) { pointer-events: none; }
 body.touch .slot { width: 56px; height: 56px; }
 body.touch .slot img { width: 42px; height: 42px; }
 #inventory .mc-btn { margin-top: 8px; width: 200px; }
+body.touch #fly-hint { top: calc(16px + env(safe-area-inset-top)); bottom: auto; }
