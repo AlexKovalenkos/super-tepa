@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Super Тёпа</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="crosshair"></div>
+    <div id="item-name"></div>
+    <div id="hotbar"></div>
+    <pre id="debug" class="hidden"></pre>
+  </div>
+
+  <div id="title" class="screen">
+    <div class="logo">
+      <div class="logo-super">SUPER</div>
+      <div class="logo-main">ТЁПА</div>
+      <div class="splash">Собачка с крыльями!</div>
+    </div>
+    <div class="menu">
+      <button id="btn-play" class="mc-btn" disabled>Загрузка мира…</button>
+      <button id="btn-new" class="mc-btn">Новый мир</button>
+      <button id="btn-help" class="mc-btn">Управление</button>
+    </div>
+    <div class="version">Super Тёпа v0.1</div>
+  </div>
+
+  <div id="pause" class="screen hidden">
+    <div class="panel">
+      <h2>Меню игры</h2>
+      <button id="btn-resume" class="mc-btn">Вернуться к игре</button>
+      <label class="mc-slider"><span>Дальность прорисовки: <b id="s-rd-v"></b></span><input id="s-rd" type="range" min="4" max="16" step="1"></label>
+      <label class="mc-slider"><span>Поле зрения: <b id="s-fov-v"></b></span><input id="s-fov" type="range" min="30" max="110" step="1"></label>
+      <label class="mc-slider"><span>Чувствительность мыши: <b id="s-sens-v"></b></span><input id="s-sens" type="range" min="0.2" max="2" step="0.05"></label>
+      <button id="btn-bob" class="mc-btn"></button>
+      <button id="btn-help2" class="mc-btn">Управление</button>
+      <button id="btn-quit" class="mc-btn">Сохранить и выйти в меню</button>
+    </div>
+  </div>
+
+  <div id="help" class="screen hidden">
+    <div class="panel">
+      <h2>Управление</h2>
+      <table class="keys">
+        <tr><td>W A S D</td><td>ходить</td></tr>
+        <tr><td>Мышь</td><td>смотреть</td></tr>
+        <tr><td>Пробел</td><td>прыжок / вверх в полёте</td></tr>
+        <tr><td>Пробел ×2</td><td>взлететь на крыльях / приземлиться</td></tr>
+        <tr><td>Shift</td><td>красться / вниз в полёте</td></tr>
+        <tr><td>W ×2, Ctrl или R</td><td>бежать</td></tr>
+        <tr><td>Левая кнопка</td><td>сломать блок</td></tr>
+        <tr><td>Правая кнопка</td><td>поставить блок</td></tr>
+        <tr><td>Средняя кнопка</td><td>взять блок, на который смотришь</td></tr>
+        <tr><td>1–9, колесо</td><td>выбрать ячейку</td></tr>
+        <tr><td>E</td><td>все блоки</td></tr>
+        <tr><td>F5 или V</td><td>вид от 1-го / 3-го лица</td></tr>
+        <tr><td>F3 или `</td><td>отладка (координаты, скорость)</td></tr>
+        <tr><td>Esc</td><td>пауза</td></tr>
+      </table>
+      <button id="btn-help-back" class="mc-btn">Назад</button>
+    </div>
+  </div>
+
+  <div id="inventory" class="screen hidden">
+    <div class="panel inv-panel">
+      <h3>Блоки</h3>
+      <div id="inv-grid"></div>
+      <p class="hint">Клик по блоку — положить в выбранную ячейку (1–9). E — закрыть.</p>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
