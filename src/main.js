@@ -15,19 +15,19 @@ import { Dragon } from './dragon.js';
 import { Whale } from './whale.js';
 import { CASTLE } from './castle.js';
 import { isTouch, setupTouch } from './touch.js';
+import { WorldStore, formatDate } from './worlds.js';
 import { UI, makeIcons } from './ui.js';
 import { TICK_MS, DAY_TICKS, VERSION } from './consts.js';
 
 THREE.ColorManagement.enabled = false;
 
-const SAVE_KEY = 'supertepa-save-v1';
 const SETTINGS_KEY = 'supertepa-settings-v1';
 const REACH = 5;
 const DEFAULT_HOTBAR = [B.grass, B.dirt, B.stone, B.cobblestone, B.planks, B.oak_log, B.glass, B.torch, B.bricks];
 
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
   del(k) { try { localStorage.removeItem(k); } catch { /* storage unavailable */ } },
 };
 
@@ -148,9 +148,9 @@ function newWorld(seed, saved) {
 }
 
 function saveGame() {
-  if (!game.world) return;
+  if (!game.world || !game.worldId) return;
   const p = game.player;
-  store.set(SAVE_KEY, {
+  worlds.save(game.worldId, {
     seed: game.world.seed, time: game.time, hotbar: game.hotbar, sel: game.sel,
     player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, flying: p.flying },
     mods: game.world.serializeMods(),
@@ -208,6 +208,7 @@ function setState(s) {
   ui.show('pause', s === 'paused');
   ui.show('inventory', s === 'inventory');
   ui.show('help', s === 'help');
+  ui.show('worlds', s === 'worlds');
   ui.show('hud', s === 'playing' || s === 'inventory');
   if (s !== 'playing') { keys.clear(); mouseL = mouseR = false; }
 }
@@ -382,10 +383,12 @@ document.getElementById('inv-grid').addEventListener('click', e => {
 // ---------- Menus ----------
 const $ = id => document.getElementById(id);
 $('btn-play').addEventListener('click', () => { if (game.spawnReady === true) startPlaying(); });
-$('btn-new').addEventListener('click', () => {
-  if (store.get(SAVE_KEY) && !confirm('Создать новый мир? Текущий мир будет удалён.')) return;
-  store.del(SAVE_KEY);
-  newWorld((Math.random() * 2147483647) | 0, null);
+$('btn-worlds').addEventListener('click', () => { worldsUI.selected = game.worldId; renderWorlds(); setState('worlds'); });
+$('btn-copy').addEventListener('click', () => {
+  saveGame();
+  const m = worlds.meta(game.worldId);
+  const id = worlds.copy(game.worldId, `${m.name} — копия ${formatDate(Date.now())}`);
+  toast(id ? 'Копия мира сохранена' : 'Не хватает места для копии');
 });
 $('btn-resume').addEventListener('click', startPlaying);
 $('btn-quit').addEventListener('click', () => { saveGame(); setState('title'); });
@@ -451,6 +454,97 @@ function tick() {
 }
 
 // Wait for terrain under the spawn point before letting the player fall
+// ---------- World list ----------
+const worldsUI = { selected: null };
+const randomSeed = () => (Math.random() * 2147483647) | 0;
+
+function loadWorld(id, autoStart) {
+  const data = worlds.get(id) || { seed: randomSeed() };
+  game.worldId = id;
+  newWorld(data.seed, data);
+  game.autoStart = autoStart;
+  const btn = $('btn-play');
+  btn.disabled = true;
+  btn.textContent = 'Загрузка мира…';
+  $('world-name').textContent = 'Мир: ' + (worlds.meta(id)?.name || '');
+}
+
+function renderWorlds() {
+  const box = $('world-list');
+  box.innerHTML = '';
+  for (const w of worlds.list()) {
+    const row = document.createElement('div');
+    row.className = 'world-row' + (w.id === worldsUI.selected ? ' selected' : '');
+    const name = document.createElement('div');
+    name.className = 'wname';
+    name.textContent = w.name;
+    const info = document.createElement('div');
+    info.className = 'winfo';
+    info.textContent = 'Последняя игра: ' + formatDate(w.played) + (w.id === game.worldId ? ' · сейчас открыт' : '');
+    row.append(name, info);
+    row.addEventListener('click', () => { worldsUI.selected = w.id; renderWorlds(); });
+    row.addEventListener('dblclick', () => { worldsUI.selected = w.id; playSelected(); });
+    box.appendChild(row);
+  }
+}
+
+function playSelected() {
+  const id = worldsUI.selected;
+  if (!id) return;
+  if (id === game.worldId) {
+    if (game.spawnReady === true) startPlaying(); else { game.autoStart = true; setState('title'); }
+    return;
+  }
+  saveGame();
+  loadWorld(id, true);
+  setState('title');
+}
+
+$('btn-w-play').addEventListener('click', playSelected);
+$('btn-w-new').addEventListener('click', () => {
+  const name = prompt('Название нового мира:', `Новый мир ${worlds.list().length + 1}`);
+  if (name === null) return;
+  const id = worlds.create(name.trim() || 'Новый мир', { seed: randomSeed() });
+  if (!id) { alert('Не хватает места для нового мира. Удалите ненужный мир.'); return; }
+  worldsUI.selected = id;
+  renderWorlds();
+});
+$('btn-w-copy').addEventListener('click', () => {
+  const id = worldsUI.selected, m = worlds.meta(id);
+  if (!m) return;
+  if (id === game.worldId) saveGame();
+  const name = prompt('Название копии:', `${m.name} — копия ${formatDate(Date.now())}`);
+  if (name === null) return;
+  const nid = worlds.copy(id, name.trim() || m.name + ' — копия');
+  if (!nid) { alert('Не хватает места для копии. Удалите ненужный мир.'); return; }
+  worldsUI.selected = nid;
+  renderWorlds();
+});
+$('btn-w-rename').addEventListener('click', () => {
+  const m = worlds.meta(worldsUI.selected);
+  if (!m) return;
+  const name = prompt('Новое название мира:', m.name);
+  if (name === null || !name.trim()) return;
+  worlds.rename(m.id, name.trim());
+  if (m.id === game.worldId) $('world-name').textContent = 'Мир: ' + name.trim();
+  renderWorlds();
+});
+$('btn-w-delete').addEventListener('click', () => {
+  const m = worlds.meta(worldsUI.selected);
+  if (!m) return;
+  if (!confirm(`Удалить мир «${m.name}» навсегда?\nВернуть его будет нельзя.`)) return;
+  const wasCurrent = m.id === game.worldId;
+  worlds.remove(m.id);
+  if (wasCurrent) {
+    game.worldId = null;
+    const next = worlds.list()[0]?.id || worlds.create('Мой мир', { seed: randomSeed() });
+    loadWorld(next, false);
+  }
+  worldsUI.selected = game.worldId;
+  renderWorlds();
+});
+$('btn-w-back').addEventListener('click', () => setState('title'));
+
 function checkSpawn() {
   const p = game.player;
   const cx = Math.floor(p.pos.x) >> 4, cz = Math.floor(p.pos.z) >> 4;
@@ -461,6 +555,7 @@ function checkSpawn() {
     p.setPos(p.pos.x, y, p.pos.z);
   }
   game.spawnReady = true;
+  if (game.autoStart) { game.autoStart = false; startPlaying(); }
   const btn = $('btn-play');
   btn.disabled = false;
   btn.textContent = 'Играть';
@@ -583,7 +678,7 @@ function frame(now) {
   }, dt);
 
   mobs.update(dt, a, t, camera.position);
-  whale.update(dt, t, game.world.castle, p.pos, (CASTLE.PLATEAU + 1 + CASTLE.MOAT) / 2);
+  whale.update(dt, t, game.world.castle, p.pos, (CASTLE.PLATEAU + 1 + CASTLE.MOAT) / 2, (x, z) => !!game.world.getChunk(Math.floor(x) >> 4, Math.floor(z) >> 4)?.meshes);
   if (game.spawnReady === true) dragon.update(dt, t, p, game.world, (x, y, z) => particles.burst(x, y, z, { tile: TILE.fx_heart, count: 1, spread: 0.6, vy: 0.05, life: 30, size: 0.3 }));
   if (touchUI) touchUI.update();
   document.getElementById('fly-hint').classList.toggle('show', game.state === 'playing' && p.flying);
@@ -659,8 +754,10 @@ ui.slots.forEach((el, i) => el.addEventListener('pointerdown', e => { e.stopProp
 $('btn-inv-close').addEventListener('click', startPlaying);
 
 // ---------- Boot ----------
-const saved = store.get(SAVE_KEY);
-newWorld(saved?.seed ?? ((Math.random() * 2147483647) | 0), saved);
+const worlds = new WorldStore(store);
+game.worlds = worlds;
+if (!worlds.list().length) worlds.create('Мой мир', { seed: randomSeed() });
+loadWorld(worlds.list()[0].id, false);
 setState('title');
 requestAnimationFrame(frame);
 

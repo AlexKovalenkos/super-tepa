@@ -83,7 +83,8 @@ export class Whale {
     }
   }
 
-  update(dt, t, castle, playerPos, moatMid) {
+  // isShown(x, z): whether the water around that spot is loaded and drawn
+  update(dt, t, castle, playerPos, moatMid, isShown) {
     if (!castle) return;
     const dist = Math.hypot(playerPos.x - castle.x, playerPos.z - castle.z);
     this.root.visible = dist < 140;
@@ -111,6 +112,7 @@ export class Whale {
 
     const y = castle.g - 4 + this.depth * 2.5 + Math.sin(t * 0.8) * 0.12; // surfaced: the back just breaks the surface
     this.root.position.set(castle.x + 0.5 + p.x, y, castle.z + 0.5 + p.z);
+    this.root.visible = isShown(this.root.position.x, this.root.position.z);
     this.root.rotation.set(Math.sin(t * 1.3) * 0.04 - (this.phase === 'rise' ? 0.12 : this.phase === 'dive' ? -0.12 : 0), this.yaw, 0, 'YXZ');
 
     const U = this.root.userData;

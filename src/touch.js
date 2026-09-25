@@ -93,7 +93,7 @@ export function setupTouch(api) {
 
   // No page zoom / scroll / callouts on iPad
   for (const ev of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
-  document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+  document.addEventListener('touchmove', e => { if (!e.target.closest('#world-list, #inv-grid')) e.preventDefault(); }, { passive: false });
 
   return {
     update() {
