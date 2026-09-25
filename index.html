@@ -3,11 +3,19 @@
 <head>
   <meta charset="utf-8">
   <title>Super Тёпа</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Super Тёпа">
+  <meta name="theme-color" content="#000000">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=0.3">
   <script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
 </head>
 <body>
@@ -34,7 +42,7 @@
       <button id="btn-new" class="mc-btn">Новый мир</button>
       <button id="btn-help" class="mc-btn">Управление</button>
     </div>
-    <div class="version">Super Тёпа v0.2</div>
+    <div class="version">Super Тёпа v0.3</div>
   </div>
 
   <div id="pause" class="screen hidden">
@@ -54,6 +62,13 @@
   <div id="help" class="screen hidden">
     <div class="panel">
       <h2>Управление</h2>
+      <table class="keys touch-only">
+        <tr><td>Джойстик слева</td><td>ходить (дотянуть до края вверх — бежать)</td></tr>
+        <tr><td>Провести пальцем справа</td><td>смотреть</td></tr>
+        <tr><td>Коснуться</td><td>поставить блок / погладить</td></tr>
+        <tr><td>Подержать палец</td><td>сломать блок</td></tr>
+        <tr><td>▲ ▼ 🦋</td><td>прыжок, вниз, полёт</td></tr>
+      </table>
       <table class="keys">
         <tr><td>Стрелки ↑ ↓ ← → или W A S D</td><td>ходить</td></tr>
         <tr><td>Мышь</td><td>смотреть</td></tr>
@@ -79,10 +94,11 @@
     <div class="panel inv-panel">
       <h3>Блоки</h3>
       <div id="inv-grid"></div>
-      <p class="hint">Клик по блоку — положить в выбранную ячейку (1–9). E — закрыть.</p>
+      <p class="hint">Нажми на блок — он попадёт в выбранную ячейку внизу. Сначала выбери ячейку (1–9 или касанием).</p>
+      <button id="btn-inv-close" class="mc-btn">Готово</button>
     </div>
   </div>
 
-  <script type="module" src="src/main.js"></script>
+  <script type="module" src="src/main.js?v=0.3"></script>
 </body>
 </html>

@@ -12,6 +12,7 @@ import { createTepa, animateTepa, createPaw } from './tepa.js';
 import { Particles } from './particles.js';
 import { Mobs } from './mobs.js';
 import { Dragon } from './dragon.js';
+import { isTouch, setupTouch } from './touch.js';
 import { UI, makeIcons } from './ui.js';
 import { TICK_MS, DAY_TICKS, VERSION } from './consts.js';
 
@@ -28,13 +29,13 @@ const store = {
   del(k) { try { localStorage.removeItem(k); } catch { /* storage unavailable */ } },
 };
 
-const settings = Object.assign({ renderDistance: 8, fov: 70, sensitivity: 1, bobbing: true, alwaysDay: false }, store.get(SETTINGS_KEY) || {});
+const settings = Object.assign({ renderDistance: isTouch ? 6 : 8, fov: 70, sensitivity: 1, bobbing: true, alwaysDay: false }, store.get(SETTINGS_KEY) || {});
 
 // ---------- Renderer & scene ----------
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1.5 : 2));
 renderer.autoClear = false;
 renderer.info.autoReset = false;
 
@@ -123,6 +124,7 @@ function newWorld(seed, saved) {
   if (mobs) mobs.clear();
   game.world = new World(seed, saved?.mods);
   mobs = new Mobs(scene, game.world, particles);
+  if (isTouch) mobs.max = 45;
   game.world.onGenerate = c => mobs.onChunk(c);
   dragon.placed = false;
   game.mobs = mobs; game.dragon = dragon;
@@ -214,7 +216,7 @@ function setState(s) {
 
 function startPlaying() {
   setState('playing');
-  lockPointer();
+  if (!isTouch) lockPointer();
 }
 
 document.addEventListener('pointerlockchange', () => {
@@ -433,6 +435,9 @@ function tick() {
     inp.jump = keys.has('Space');
     inp.sneak = keys.has('ShiftLeft') || keys.has('ShiftRight');
     inp.sprint = sprintLatch || keys.has('ControlLeft') || keys.has('KeyR');
+    const tm = game.touchMove;
+    if (tm && (tm.x || tm.z)) { inp.moveX = tm.x; inp.moveZ = tm.z; inp.sprint = inp.sprint || tm.sprint; }
+    else { inp.moveX = inp.moveZ = undefined; }
     p.tick(inp);
     if (p.pos.y < -64) { p.setPos(p.pos.x, game.world.topSolidY(Math.floor(p.pos.x), Math.floor(p.pos.z)) + 1, p.pos.z); }
     if ((mouseL || keys.has('KeyZ')) && --game.breakCd <= 0) { breakBlock(); game.breakCd = 5; }
@@ -589,6 +594,7 @@ function frame(now) {
 
   mobs.update(dt, a, t, camera.position);
   if (game.spawnReady === true) dragon.update(dt, t, p, game.world, (x, y, z) => particles.burst(x, y, z, { tile: TILE.fx_heart, count: 1, spread: 0.6, vy: 0.05, life: 30, size: 0.3 }));
+  if (touchUI) touchUI.update();
   document.getElementById('fly-hint').classList.toggle('show', game.state === 'playing' && p.flying);
 
   particles.update(camera, a);
@@ -639,6 +645,27 @@ function frame(now) {
     ].join('\n'));
   } else ui.setDebug(null);
 }
+
+// ---------- Touch (iPad) ----------
+let touchUI = null;
+if (isTouch) {
+  touchUI = setupTouch({
+    key(code, down) { document.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code })); },
+    look(dx, dy) {
+      const p = game.player, s = 0.006 * settings.sensitivity;
+      p.yaw -= dx * s;
+      p.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, p.pitch - dy * s));
+    },
+    use() { placeBlock(); },
+    move(x, z, sprint) { game.touchMove = { x, z, sprint }; },
+    pause() { setState('paused'); saveGame(); },
+    isFlying: () => game.player.flying,
+    state: () => game.state,
+  });
+  document.getElementById('fly-hint').textContent = 'Полёт: ▲ — вверх · ▼ — вниз · 🦋 — сложить крылья';
+}
+ui.slots.forEach((el, i) => el.addEventListener('pointerdown', e => { e.stopPropagation(); selectSlot(i); }));
+$('btn-inv-close').addEventListener('click', startPlaying);
 
 // ---------- Boot ----------
 const saved = store.get(SAVE_KEY);

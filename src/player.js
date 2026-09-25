@@ -187,8 +187,9 @@ export class Player {
     if (Math.abs(v.y) < 0.003) v.y = 0;
     if (Math.abs(v.z) < 0.003) v.z = 0;
 
-    const fwd = (inp.forward ? 1 : 0) - (inp.back ? 1 : 0);
-    const str = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    // Analog input (touch joystick) or keys
+    const fwd = inp.moveZ ?? ((inp.forward ? 1 : 0) - (inp.back ? 1 : 0));
+    const str = inp.moveX ?? ((inp.right ? 1 : 0) - (inp.left ? 1 : 0));
     this.sneaking = inp.sneak && !this.flying;
     if (inp.sprint && fwd > 0 && !this.sneaking) this.sprinting = true;
     if (fwd <= 0 || this.sneaking || (this.hColl && !this.flying)) this.sprinting = false;
