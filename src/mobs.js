@@ -2,7 +2,7 @@
 // Each mob uses the same physics body as the player (collisions, gravity, stepping, swimming).
 import * as THREE from 'three';
 import { Player } from './player.js';
-import { B, SOLID } from './blocks.js';
+import { B } from './blocks.js';
 import { mulberry32 } from './noise.js';
 import { BIOME } from './worldgen.js';
 import { TILE } from './textures.js';
@@ -319,6 +319,9 @@ export class Mobs {
       const ix = b.prev.x + (b.pos.x - b.prev.x) * alpha;
       const iy = b.prev.y + (b.pos.y - b.prev.y) * alpha;
       const iz = b.prev.z + (b.pos.z - b.prev.z) * alpha;
+      const cd = Math.hypot(camPos.x - ix, camPos.z - iz);
+      m.root.visible = cd < 64;
+      if (!m.root.visible) continue;
       m.root.position.set(ix, iy, iz);
       m.root.rotation.y = b.yaw;
       const st = {
@@ -328,10 +331,7 @@ export class Mobs {
       };
       if (m.kind === 'dog') animateDog(m.root, st, dt);
       else animateAnimal(m.root, m.kind, st);
-      if (m.tag) {
-        const d = Math.hypot(camPos.x - ix, camPos.y - iy, camPos.z - iz);
-        m.tag.visible = d < 20;
-      }
+      if (m.tag) m.tag.visible = cd < 20;
     }
   }
 
@@ -341,4 +341,3 @@ export class Mobs {
   }
 }
 
-export { SOLID };

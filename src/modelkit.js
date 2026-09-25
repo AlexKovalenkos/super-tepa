@@ -40,16 +40,35 @@ export const flat = (c, seed = 1) => fur(seed, c, c.map(v => v - 12), c.map(v =>
 export const over = (a, b) => (px, w, h) => { a(px, w, h); b(px, w, h); };
 
 // Box of w x h x d pixels; faces {px,nx,py,ny,pz,nz} override the default painter. Front of a mob is -z ("nz").
+// All six faces are painted side by side into one texture, so each box is a single draw call.
 export function box(w, h, d, faces, def, matOpts = {}) {
+  const order = ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
   const dims = { px: [d, h], nx: [d, h], py: [w, d], ny: [w, d], pz: [w, h], nz: [w, h] };
-  const mats = ['px', 'nx', 'py', 'ny', 'pz', 'nz'].map(f => {
-    const [tw, th] = dims[f];
-    const map = canvasTex(Math.max(1, Math.round(tw)), Math.max(1, Math.round(th)), faces[f] || def);
-    const m = new THREE.MeshLambertMaterial({ map, ...matOpts });
-    if (matOpts.emissive) m.emissiveMap = map;
-    return m;
+  const sizes = order.map(f => dims[f].map(v => Math.max(1, Math.round(v))));
+  const W = sizes.reduce((s, [fw]) => s + fw + 1, 0), H = Math.max(...sizes.map(([, fh]) => fh));
+  const offs = [];
+  let ox = 0;
+  for (const [fw] of sizes) { offs.push(ox); ox += fw + 1; }
+  const map = canvasTex(W, H, px => {
+    order.forEach((f, i) => {
+      const [fw, fh] = sizes[i];
+      const sub = (x, y, c, a) => { if (x >= 0 && y >= 0 && x < fw && y < fh) px(offs[i] + x, y, c, a); };
+      (faces[f] || def)(sub, fw, fh);
+    });
   });
-  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
+  const g = new THREE.BoxGeometry(w, h, d);
+  const uv = g.attributes.uv;
+  for (let i = 0; i < 6; i++) {
+    const [fw, fh] = sizes[i];
+    for (let k = 0; k < 4; k++) {
+      const j = i * 4 + k;
+      uv.setXY(j, (offs[i] + uv.getX(j) * fw) / W, 1 - fh / H + uv.getY(j) * fh / H);
+    }
+  }
+  g.clearGroups();
+  const m = new THREE.MeshLambertMaterial({ map, ...matOpts });
+  if (matOpts.emissive) m.emissiveMap = map;
+  return new THREE.Mesh(g, m);
 }
 
 export function pivot(parent, x, y, z, name) {

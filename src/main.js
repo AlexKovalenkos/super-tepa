@@ -36,6 +36,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPrefer
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.autoClear = false;
+renderer.info.autoReset = false;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(settings.fov, 1, 0.05, 1000);
@@ -76,7 +77,7 @@ scene.add(ambient, sun);
 const hand = new THREE.Group();
 handScene.add(hand);
 const paw = createPaw();
-paw.traverse(o => { if (o.material) o.material = o.material.map(m => new THREE.MeshBasicMaterial({ map: m.map })); });
+paw.traverse(o => { if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ map: o.material.map }); });
 hand.add(paw);
 const heldMat = new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide });
 const held = new THREE.Mesh(new THREE.BufferGeometry(), heldMat);
@@ -89,6 +90,16 @@ const outline = new THREE.LineSegments(
 );
 outline.visible = false;
 scene.add(outline);
+// Soft white glow on the block that will break, and a see-through "ghost" where the new block will go
+const highlight = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, depthWrite: false }));
+highlight.visible = false;
+scene.add(highlight);
+const ghostMat = new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
+const ghost = new THREE.Mesh(new THREE.BufferGeometry(), ghostMat);
+ghost.visible = false;
+ghost.renderOrder = 4;
+scene.add(ghost);
+let ghostId = -1;
 
 // ---------- Game state ----------
 const game = {
@@ -211,7 +222,7 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.code === 'Tab' || e.code === 'F3' || e.code === 'F5' || e.code === 'Space') e.preventDefault();
+  if (['Tab', 'F3', 'F5', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (game.state === 'inventory' && (e.code === 'KeyE' || e.code === 'Escape')) { startPlaying(); return; }
   if (game.state === 'inventory' && e.code.startsWith('Digit')) { const n = +e.code.slice(5); if (n >= 1) selectSlot(n - 1); return; }
   if (game.state === 'paused' && e.code === 'Escape' && !e.repeat) { startPlaying(); return; }
@@ -219,7 +230,7 @@ document.addEventListener('keydown', e => {
   if (e.repeat) { keys.add(e.code); return; }
   keys.add(e.code);
   const now = performance.now();
-  if (e.code === 'KeyW') { if (now - lastW < 300) sprintLatch = true; lastW = now; }
+  if (e.code === 'KeyW' || e.code === 'ArrowUp') { if (now - lastW < 300) sprintLatch = true; lastW = now; }
   if (e.code === 'Space') {
     // Double tap within 7 ticks (350 ms), as in Minecraft
     if (now - lastSpace < 350 && !game.player.inWater) { toggleFly(); lastSpace = 0; } else lastSpace = now;
@@ -233,7 +244,7 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('keyup', e => {
   keys.delete(e.code);
-  if (e.code === 'KeyW') sprintLatch = false;
+  if (e.code === 'KeyW' || e.code === 'ArrowUp') sprintLatch = false;
 });
 window.addEventListener('blur', () => { keys.clear(); mouseL = mouseR = false; });
 
@@ -247,12 +258,13 @@ document.addEventListener('mousemove', e => {
 canvas.addEventListener('mousedown', e => {
   if (game.state !== 'playing') return;
   if (!locked()) { lockPointer(); return; }
+  if (e.button === 0 && (e.ctrlKey || e.altKey)) { mouseR = true; placeBlock(); game.placeCd = 4; return; }
   if (e.button === 0) { mouseL = true; breakBlock(); game.breakCd = 5; }
   if (e.button === 2) { mouseR = true; placeBlock(); game.placeCd = 4; }
   if (e.button === 1) { e.preventDefault(); pickBlock(); }
 });
 document.addEventListener('mouseup', e => {
-  if (e.button === 0) mouseL = false;
+  if (e.button === 0) { mouseL = false; mouseR = false; }
   if (e.button === 2) mouseR = false;
 });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -267,14 +279,14 @@ function aimRay() {
   const p = game.player;
   if (game.camMode === 1) {
     const d = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    return { ox: camera.position.x, oy: camera.position.y, oz: camera.position.z, dx: d.x, dy: d.y, dz: d.z, max: game.camDist + REACH };
+    return { ox: camera.position.x, oy: camera.position.y, oz: camera.position.z, dx: d.x, dy: d.y, dz: d.z, max: game.camDist + REACH, min: game.camDist - 0.6 };
   }
   const cp = Math.cos(p.pitch);
   return { ox: p.pos.x, oy: p.pos.y + p.eye, oz: p.pos.z, dx: -Math.sin(p.yaw) * cp, dy: Math.sin(p.pitch), dz: -Math.cos(p.yaw) * cp, max: REACH };
 }
 
 function raycast() {
-  const { ox, oy, oz, dx, dy, dz, max: REACH } = aimRay();
+  const { ox, oy, oz, dx, dy, dz, max: REACH, min = 0 } = aimRay();
   let x = Math.floor(ox), y = Math.floor(oy), z = Math.floor(oz);
   const sx = Math.sign(dx), sy = Math.sign(dy), sz = Math.sign(dz);
   const tdx = dx ? Math.abs(1 / dx) : Infinity, tdy = dy ? Math.abs(1 / dy) : Infinity, tdz = dz ? Math.abs(1 / dz) : Infinity;
@@ -284,7 +296,7 @@ function raycast() {
   let nx = 0, ny = 0, nz = 0, tHit = 0;
   for (let i = 0; i < 128; i++) {
     const id = game.world.getBlock(x, y, z);
-    if (id && id !== B.water) return { x, y, z, nx, ny, nz, id, t: tHit };
+    if (id && id !== B.water && tHit >= min) return { x, y, z, nx, ny, nz, id, t: tHit };
     if (tx < ty && tx < tz) { if (tx > REACH) break; tHit = tx; x += sx; tx += tdx; nx = -sx; ny = 0; nz = 0; }
     else if (ty < tz) { if (ty > REACH) break; tHit = ty; y += sy; ty += tdy; nx = 0; ny = -sy; nz = 0; }
     else { if (tz > REACH) break; tHit = tz; z += sz; tz += tdz; nx = 0; ny = 0; nz = -sz; }
@@ -323,22 +335,29 @@ function petMob() {
   return true;
 }
 
-function placeBlock() {
-  if (petMob()) return;
-  const t = game.target, id = game.hotbar[game.sel];
-  if (!t || !id) return;
-  game.swing = 1;
+// Where a block would be placed for this target, or null if it can't go there
+function placeTarget(t, id) {
+  if (!t || !id) return null;
   const w = game.world;
   let x = t.x + t.nx, y = t.y + t.ny, z = t.z + t.nz;
   if (t.id === B.short_grass) { x = t.x; y = t.y; z = t.z; }
   const cur = w.getBlock(x, y, z);
-  if (cur && cur !== B.water && cur !== B.short_grass) return;
-  if (BLOCKS[id].needsSupport && !OPAQUE[w.getBlock(x, y - 1, z)]) return;
+  if (cur && cur !== B.water && cur !== B.short_grass) return null;
+  if (BLOCKS[id].needsSupport && !OPAQUE[w.getBlock(x, y - 1, z)]) return null;
   if (SOLID[id]) {
     const b = game.player.box();
-    if (x < b.x1 && x + 1 > b.x0 && y < b.y1 && y + 1 > b.y0 && z < b.z1 && z + 1 > b.z0) return;
+    if (x < b.x1 && x + 1 > b.x0 && y < b.y1 && y + 1 > b.y0 && z < b.z1 && z + 1 > b.z0) return null;
   }
-  if (w.setBlock(x, y, z, id)) afterEdit(x, z);
+  return { x, y, z };
+}
+
+function placeBlock() {
+  if (petMob()) return;
+  const id = game.hotbar[game.sel];
+  const at = placeTarget(game.target, id);
+  if (!at) return;
+  game.swing = 1;
+  if (game.world.setBlock(at.x, at.y, at.z, id)) afterEdit(at.x, at.z);
 }
 
 function pickBlock() {
@@ -406,8 +425,8 @@ function tick() {
   advanceTime();
   const p = game.player;
   if (game.state === 'playing') {
-    inp.forward = keys.has('KeyW'); inp.back = keys.has('KeyS');
-    inp.left = keys.has('KeyA'); inp.right = keys.has('KeyD');
+    inp.forward = keys.has('KeyW') || keys.has('ArrowUp'); inp.back = keys.has('KeyS') || keys.has('ArrowDown');
+    inp.left = keys.has('KeyA') || keys.has('ArrowLeft'); inp.right = keys.has('KeyD') || keys.has('ArrowRight');
     inp.jump = keys.has('Space');
     inp.sneak = keys.has('ShiftLeft') || keys.has('ShiftRight');
     inp.sprint = sprintLatch || keys.has('ControlLeft') || keys.has('KeyR');
@@ -535,10 +554,20 @@ function frame(now) {
   if (game.target && game.camMode !== 2) {
     const tg = game.target, sh = SHAPE[tg.id];
     outline.visible = true;
+    highlight.visible = true;
+    highlight.position.set(tg.x + 0.5, tg.y + 0.5, tg.z + 0.5);
+    const gid = game.hotbar[game.sel];
+    const gp = placeTarget(tg, gid);
+    ghost.visible = !!gp;
+    if (gp) {
+      if (ghostId !== gid) { ghost.geometry.dispose(); ghost.geometry = buildItemGeometry(gid); ghostId = gid; }
+      ghost.position.set(gp.x + 0.5, gp.y + 0.5, gp.z + 0.5);
+      ghost.rotation.y = SHAPE[gid] ? Math.PI / 4 : 0;
+    }
     if (sh === 2) { outline.scale.set(0.3, 0.64, 0.3); outline.position.set(tg.x + 0.5, tg.y + 0.32, tg.z + 0.5); }
     else if (sh === 1) { outline.scale.set(0.8, 0.8, 0.8); outline.position.set(tg.x + 0.5, tg.y + 0.4, tg.z + 0.5); }
     else { outline.scale.set(1, 1, 1); outline.position.set(tg.x + 0.5, tg.y + 0.5, tg.z + 0.5); }
-  } else outline.visible = false;
+  } else outline.visible = highlight.visible = ghost.visible = false;
 
   // Tepa model
   const bright = brightnessAt(ix, iy + 1, iz);
@@ -561,6 +590,7 @@ function frame(now) {
 
   particles.update(camera, a);
 
+  renderer.info.reset();
   renderer.clear();
   renderer.render(scene, camera);
 
@@ -577,7 +607,7 @@ function frame(now) {
     held.rotation.set(0.1, 0.78, 0);
     held.scale.setScalar(SHAPE[game.hotbar[game.sel]] ? 0.3 : 0.22);
     heldMat.color.setScalar(bright);
-    paw.traverse(o => { if (o.material) o.material.forEach(m => m.color.setScalar(bright)); });
+    paw.traverse(o => { if (o.isMesh) o.material.color.setScalar(bright); });
     renderer.clearDepth();
     renderer.render(handScene, handCamera);
   }
@@ -592,7 +622,7 @@ function frame(now) {
     const col = game.world.gen.column(bx, bz);
     ui.setDebug([
       `Super Тёпа v${VERSION} (${clock.fps} fps)`,
-      `Чанки: ${st.meshed} отрисовано / ${st.loaded} загружено   Существ: ${mobs.list.length}`,
+      `Чанки: ${st.meshed} отрисовано / ${st.loaded} загружено   Существ: ${mobs.list.length}   Вызовов: ${renderer.info.render.calls}`,
       ``,
       `XYZ: ${p.pos.x.toFixed(3)} / ${p.pos.y.toFixed(5)} / ${p.pos.z.toFixed(3)}`,
       `Блок: ${bx} ${by} ${bz}   Чанк: ${bx >> 4} ${bz >> 4}`,
@@ -617,5 +647,6 @@ requestAnimationFrame(frame);
 game.input = { keys, inp };
 game.setKey = (code, down) => { if (down) keys.add(code); else keys.delete(code); };
 game.play = () => setState('playing');
+game.renderer = renderer;
 game.breakBlock = breakBlock;
 game.placeBlock = placeBlock;

@@ -93,6 +93,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color:
 
 #toast, #fly-hint { position: absolute; left: 50%; transform: translateX(-50%); font-size: 12px; text-shadow: 2px 2px 0 var(--text-shadow); white-space: nowrap; opacity: 0; transition: opacity .3s; }
 #toast { top: 22%; font-size: 14px; color: #ffe680; }
-#fly-hint { bottom: 112px; font-size: 10px; color: #e8f4ff; background: rgba(0,0,0,.35); padding: 6px 10px; }
+#fly-hint { bottom: 110px; font-size: 10px; color: #e8f4ff; background: rgba(0,0,0,.35); padding: 6px 10px; }
 #toast.show, #fly-hint.show { opacity: 1; }
 @media (max-width: 700px) { #fly-hint { white-space: normal; width: calc(100vw - 32px); text-align: center; } }
+#controls-hint { position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; color: #fff; text-shadow: 1px 1px 0 #000; background: rgba(0,0,0,.3); padding: 4px 10px; border-radius: 3px; white-space: nowrap; }
+#controls-hint b { color: #ffe680; font-weight: 600; }
+@media (max-width: 760px) { #controls-hint { white-space: normal; width: calc(100vw - 32px); text-align: center; } }
